@@ -127,7 +127,8 @@ async def github_callback(code: str):
 
     # Redirect to frontend with access token in URL
     # Frontend will grab it and store it
-    response = RedirectResponse(url=f"http://localhost:5173?access_token={access_token}")
+    # response = RedirectResponse(url=f"http://localhost:5173?access_token={access_token}")
+    response = RedirectResponse(url=f"https://llm-chatapp-backend.vercel.app?access_token={access_token}")
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,

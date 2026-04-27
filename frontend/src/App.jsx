@@ -4,10 +4,8 @@ import Register from '../pages/Register'
 import Chat from '../pages/Chat'
 import { AuthProvider, useAuth } from '../context/AuthContext'
 
-// Route guard components
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
-  
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
@@ -15,7 +13,6 @@ function ProtectedRoute({ children }) {
       </div>
     )
   }
-  
   return user ? children : <Navigate to="/login" />
 }
 
@@ -30,30 +27,10 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route 
-            path="/login" 
-            element={
-              <PublicRoute>
-                <Login />
-              </PublicRoute>
-            } 
-          />
-          <Route 
-            path="/register" 
-            element={
-              <PublicRoute>
-                <Register />
-              </PublicRoute>
-            } 
-          />
-          <Route 
-            path="/" 
-            element={
-              <ProtectedRoute>
-                <Chat />
-              </ProtectedRoute>
-            } 
-          />
+          <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+          <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+          <Route path="/" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
+          <Route path="/chat/:chatId" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

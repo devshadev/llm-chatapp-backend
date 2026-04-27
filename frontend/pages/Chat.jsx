@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import MessageBubble from '../components/MessageBubble'
 import api from '../api'
 
 export default function Chat() {
+  const { chatId } = useParams()
+  const navigate = useNavigate()
   const [chats, setChats] = useState([])
   const [activeChat, setActiveChat] = useState(null)
   const [messages, setMessages] = useState([])
@@ -21,13 +24,20 @@ export default function Chat() {
     loadChats()
   }, [])
 
-  // Auto resize textarea
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
       textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 160) + 'px'
     }
   }, [input])
+
+  // When URL has a chatId and chats are loaded, open that chat
+  useEffect(() => {
+    if (chatId && chats.length > 0) {
+      const found = chats.find(c => c.id === chatId)
+      if (found) handleSelectChat(found)
+    }
+  }, [chatId, chats])
 
   const loadChats = async () => {
     try {
@@ -41,6 +51,7 @@ export default function Chat() {
 
   const handleSelectChat = async (chat) => {
     setActiveChat(chat)
+    navigate(`/chat/${chat.id}`)
     try {
       const res = await api.get(`/chats/${chat.id}`)
       setMessages(res.data.messages)
@@ -55,6 +66,7 @@ export default function Chat() {
       setChats(prev => [res.data, ...prev])
       setActiveChat(res.data)
       setMessages([])
+      navigate(`/chat/${res.data.id}`)
     } catch (err) {
       console.error('Failed to create chat', err)
     }
@@ -67,6 +79,7 @@ export default function Chat() {
       if (activeChat?.id === chatId) {
         setActiveChat(null)
         setMessages([])
+        navigate('/')
       }
     } catch (err) {
       console.error('Failed to delete chat', err)
@@ -103,6 +116,7 @@ export default function Chat() {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
+          credentials: 'include',
           body: JSON.stringify({ content: currentInput })
         }
       )
@@ -126,6 +140,13 @@ export default function Chat() {
                     : msg
                 ))
               }
+              if (data.done) {
+                setMessages(prev => prev.map(msg =>
+                  msg.id === assistantMsgId
+                    ? data.assistant_message
+                    : msg
+                ))
+              }
             } catch { }
           }
         }
@@ -146,7 +167,6 @@ export default function Chat() {
       handleSend()
     }
   }
-
 
   return (
     <div className="flex h-screen bg-[#0a0a0f]">
@@ -172,8 +192,6 @@ export default function Chat() {
                 <h2 className="font-semibold text-white text-sm truncate">{activeChat.title}</h2>
                 <p className="text-xs text-gray-500">AI Assistant</p>
               </div>
-
-              {/* Status dot */}
               <div className="ml-auto flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span className="text-xs text-gray-500">Online</span>
@@ -249,24 +267,20 @@ export default function Chat() {
         ) : (
           /* Welcome screen */
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8 relative overflow-hidden">
-            {/* Background glows */}
             <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-violet-600/5 rounded-full blur-[100px] pointer-events-none" />
-
             <div className="relative z-10">
               <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-violet-500/20 to-indigo-600/20 border border-violet-500/20 flex items-center justify-center mb-6 mx-auto">
                 <svg className="w-10 h-10 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                 </svg>
               </div>
-
               <h2 className="text-3xl font-bold text-white mb-2 tracking-tight">
                 How can I help you today?
               </h2>
               <p className="text-gray-400 mb-10 text-sm">
                 Select a chat from the sidebar or start a new one
               </p>
-
-            <button
+              <button
                 onClick={handleNewChat}
                 className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold px-8 py-3 rounded-2xl transition-all duration-200 shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 text-sm"
               >

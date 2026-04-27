@@ -1,0 +1,12 @@
+# Python
+.env
+__pycache__/
+*.pyc
+venv/
+*.gguf
+
+# Frontend
+frontend/node_modules/
+frontend/.env
+frontend/.env.production
+frontend/dist/

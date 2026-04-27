@@ -31,7 +31,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route 
-            path="/" 
+            path="/login" 
             element={
               <PublicRoute>
                 <Login />

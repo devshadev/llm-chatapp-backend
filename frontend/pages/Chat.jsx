@@ -11,6 +11,7 @@ export default function Chat() {
   const [loading, setLoading] = useState(false)
   const [loadingChats, setLoadingChats] = useState(true)
   const messagesEndRef = useRef(null)
+  const textareaRef = useRef(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -19,6 +20,14 @@ export default function Chat() {
   useEffect(() => {
     loadChats()
   }, [])
+
+  // Auto resize textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 160) + 'px'
+    }
+  }, [input])
 
   const loadChats = async () => {
     try {
@@ -64,7 +73,6 @@ export default function Chat() {
     }
   }
 
-  // ✅ Updated handleSend with streaming
   const handleSend = async () => {
     if (!input.trim() || !activeChat || loading) return
 
@@ -74,7 +82,6 @@ export default function Chat() {
     setInput('')
     setLoading(true)
 
-    // Update chat title from first message
     if (messages.length === 0) {
       const newTitle = currentInput.slice(0, 40)
       await api.patch(`/chats/${activeChat.id}`, { title: newTitle })
@@ -83,14 +90,13 @@ export default function Chat() {
       ))
     }
 
-    // Add empty assistant message to fill in as tokens arrive
     const assistantMsgId = Date.now() + 1
     setMessages(prev => [...prev, { role: 'assistant', content: '', id: assistantMsgId }])
 
     try {
       const token = localStorage.getItem('access_token')
       const response = await fetch(
-        `http://localhost:8000/chats/${activeChat.id}/messages/stream`,
+        `${import.meta.env.VITE_API_URL}/chats/${activeChat.id}/messages/stream`,
         {
           method: 'POST',
           headers: {
@@ -107,16 +113,13 @@ export default function Chat() {
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-
         const chunk = decoder.decode(value)
         const lines = chunk.split('\n')
-
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6))
               if (data.token) {
-                // Append each token to the assistant message
                 setMessages(prev => prev.map(msg =>
                   msg.id === assistantMsgId
                     ? { ...msg, content: msg.content + data.token }
@@ -144,8 +147,9 @@ export default function Chat() {
     }
   }
 
+
   return (
-    <div className="flex h-screen bg-gray-950">
+    <div className="flex h-screen bg-[#0a0a0f]">
       <Sidebar
         chats={chats}
         activeChat={activeChat}
@@ -154,37 +158,57 @@ export default function Chat() {
         onDeleteChat={handleDeleteChat}
       />
 
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         {activeChat ? (
           <>
-            <div className="px-6 py-4 border-b border-gray-800 bg-gray-900">
-              <h2 className="font-medium text-white truncate">{activeChat.title}</h2>
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-white/[0.06] bg-[#0d0d14]/80 backdrop-blur-xl flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+              </div>
+              <div className="min-w-0">
+                <h2 className="font-semibold text-white text-sm truncate">{activeChat.title}</h2>
+                <p className="text-xs text-gray-500">AI Assistant</p>
+              </div>
+
+              {/* Status dot */}
+              <div className="ml-auto flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span className="text-xs text-gray-500">Online</span>
+              </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto px-4 py-6 space-y-2">
               {messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center h-full text-center">
-                  <div className="w-12 h-12 rounded-2xl bg-violet-600/20 flex items-center justify-center mb-4">
-                    <svg className="w-6 h-6 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500/20 to-indigo-600/20 border border-violet-500/20 flex items-center justify-center mb-4">
+                    <svg className="w-7 h-7 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                     </svg>
                   </div>
-                  <p className="text-gray-400 font-medium">Start the conversation</p>
-                  <p className="text-gray-600 text-sm mt-1">Ask me anything!</p>
+                  <p className="text-white font-semibold text-lg">Start the conversation</p>
+                  <p className="text-gray-500 text-sm mt-1 mb-6">Ask anything — I'm here to help</p>
                 </div>
               )}
+
               {messages.map((msg, i) => (
                 <MessageBubble key={msg.id || i} message={msg} />
               ))}
-              {/* Show typing indicator only when loading but assistant message is empty */}
+
+              {/* Typing indicator */}
               {loading && messages[messages.length - 1]?.content === '' && (
-                <div className="flex gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs text-gray-300">AI</div>
-                  <div className="bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-3">
+                <div className="flex gap-3 px-2">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-xs text-white font-bold shrink-0">
+                    AI
+                  </div>
+                  <div className="bg-gray-800/60 border border-white/[0.06] rounded-2xl rounded-tl-sm px-4 py-3">
                     <div className="flex gap-1 items-center h-5">
-                      <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                      <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                      <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                      <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                      <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                      <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
                     </div>
                   </div>
                 </div>
@@ -192,43 +216,63 @@ export default function Chat() {
               <div ref={messagesEndRef} />
             </div>
 
-            <div className="px-6 py-4 border-t border-gray-800 bg-gray-900">
-              <div className="flex gap-3 items-end">
-                <textarea
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Message... (Enter to send, Shift+Enter for new line)"
-                  rows={1}
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition resize-none text-sm"
-                />
-                <button
-                  onClick={handleSend}
-                  disabled={!input.trim() || loading}
-                  className="bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white p-3 rounded-xl transition shrink-0"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                  </svg>
-                </button>
+            {/* Input area */}
+            <div className="px-4 pb-4 pt-2 border-t border-white/[0.06] bg-[#0d0d14]/80 backdrop-blur-xl">
+              <div className="max-w-3xl mx-auto">
+                <div className="relative bg-gray-800/60 border border-white/[0.08] hover:border-white/[0.12] focus-within:border-violet-500/50 focus-within:ring-2 focus-within:ring-violet-500/10 rounded-2xl transition-all duration-200">
+                  <textarea
+                    ref={textareaRef}
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Message AI Assistant..."
+                    rows={1}
+                    className="w-full bg-transparent px-4 pt-3.5 pb-3 pr-14 text-white text-sm placeholder-gray-500 focus:outline-none resize-none leading-relaxed"
+                    style={{ maxHeight: '160px' }}
+                  />
+                  <button
+                    onClick={handleSend}
+                    disabled={!input.trim() || loading}
+                    className="absolute right-2.5 bottom-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed text-white p-2 rounded-xl transition-all duration-200 shadow-lg shadow-violet-500/20"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                  </button>
+                </div>
+                <p className="text-center text-gray-600 text-xs mt-2">
+                  Press <kbd className="bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded text-xs">Enter</kbd> to send · <kbd className="bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded text-xs">Shift+Enter</kbd> for new line
+                </p>
               </div>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-            <div className="w-16 h-16 rounded-3xl bg-violet-600/20 flex items-center justify-center mb-6">
-              <svg className="w-8 h-8 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-              </svg>
-            </div>
-            <h2 className="text-2xl font-bold text-white mb-2">How can I help you today?</h2>
-            <p className="text-gray-400 mb-8">Start a new chat or select an existing one</p>
+          /* Welcome screen */
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-8 relative overflow-hidden">
+            {/* Background glows */}
+            <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-violet-600/5 rounded-full blur-[100px] pointer-events-none" />
+
+            <div className="relative z-10">
+              <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-violet-500/20 to-indigo-600/20 border border-violet-500/20 flex items-center justify-center mb-6 mx-auto">
+                <svg className="w-10 h-10 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+              </div>
+
+              <h2 className="text-3xl font-bold text-white mb-2 tracking-tight">
+                How can I help you today?
+              </h2>
+              <p className="text-gray-400 mb-10 text-sm">
+                Select a chat from the sidebar or start a new one
+              </p>
+
             <button
-              onClick={handleNewChat}
-              className="bg-violet-600 hover:bg-violet-500 text-white font-medium px-6 py-3 rounded-xl transition"
-            >
-              Start New Chat
-            </button>
+                onClick={handleNewChat}
+                className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold px-8 py-3 rounded-2xl transition-all duration-200 shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 text-sm"
+              >
+                Start New Chat
+              </button>
+            </div>
           </div>
         )}
       </div>

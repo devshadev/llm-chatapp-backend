@@ -90,11 +90,14 @@ export default function Chat() {
     if (!input.trim() || !activeChat || loading) return
 
     const userMessage = { role: 'user', content: input, id: Date.now() }
-    setMessages(prev => [...prev, userMessage])
     const currentInput = input
     setInput('')
     setLoading(true)
 
+    // Add user message
+    setMessages(prev => [...prev.filter(Boolean), userMessage])
+
+    // Update chat title from first message
     if (messages.length === 0) {
       const newTitle = currentInput.slice(0, 40)
       await api.patch(`/chats/${activeChat.id}`, { title: newTitle })
@@ -104,7 +107,6 @@ export default function Chat() {
     }
 
     const assistantMsgId = Date.now() + 1
-    setMessages(prev => [...prev, { role: 'assistant', content: '', id: assistantMsgId }])
 
     try {
       const token = localStorage.getItem('access_token')
@@ -116,48 +118,94 @@ export default function Chat() {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          credentials: 'include',
           body: JSON.stringify({ content: currentInput })
         }
       )
 
+      if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`)
+      }
+
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
+      let fullContent = ''
+      let streamStarted = false
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-        const chunk = decoder.decode(value)
+
+        const chunk = decoder.decode(value, { stream: true })
         const lines = chunk.split('\n')
+
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6))
+
               if (data.token) {
-                setMessages(prev => prev.map(msg =>
-                  msg.id === assistantMsgId
-                    ? { ...msg, content: msg.content + data.token }
-                    : msg
-                ))
+                fullContent += data.token
+
+                if (!streamStarted) {
+                  // First token — add the assistant message bubble
+                  streamStarted = true
+                  setMessages(prev => [
+                    ...prev.filter(Boolean),
+                    { role: 'assistant', content: fullContent, id: assistantMsgId }
+                  ])
+                } else {
+                  // Subsequent tokens — update existing bubble
+                  setMessages(prev => prev.filter(Boolean).map(msg =>
+                    msg.id === assistantMsgId
+                      ? { ...msg, content: fullContent }
+                      : msg
+                  ))
+                }
               }
+
+              // ✅ When done signal arrives — finalize with full content
               if (data.done) {
-                setMessages(prev => prev.map(msg =>
+                setMessages(prev => prev.filter(Boolean).map(msg =>
                   msg.id === assistantMsgId
-                    ? data.assistant_message
+                    ? { ...msg, content: fullContent }
                     : msg
                 ))
               }
+
             } catch { }
           }
         }
       }
+
+      // ✅ Final safety — ensure message persists after stream ends
+      setMessages(prev => {
+        const exists = prev.some(m => m?.id === assistantMsgId)
+        if (!exists && fullContent) {
+          return [...prev.filter(Boolean), {
+            role: 'assistant',
+            content: fullContent,
+            id: assistantMsgId
+          }]
+        }
+        return prev.filter(Boolean).map(msg =>
+          msg?.id === assistantMsgId
+            ? { ...msg, content: fullContent }
+            : msg
+        )
+      })
+
     } catch (err) {
-      setMessages(prev => prev.map(msg =>
-        msg.id === assistantMsgId
-          ? { ...msg, content: 'Sorry, something went wrong. Please try again.' }
-          : msg
-      ))
+      console.error('Streaming error:', err)
+      setMessages(prev => [
+        ...prev.filter(Boolean),
+        {
+          role: 'assistant',
+          content: 'Sorry, something went wrong. Please try again.',
+          id: assistantMsgId
+        }
+      ])
     }
+
     setLoading(false)
   }
 

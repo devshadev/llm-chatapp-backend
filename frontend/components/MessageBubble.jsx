@@ -3,11 +3,13 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
 export default function MessageBubble({ message }) {
-  const isUser = message.role === 'user'
   const [copied, setCopied] = useState(false)
 
-  // ✅ Fix double bubble — don't render empty assistant messages
-  if (!isUser && !message.content) return null
+  // ✅ Guard first — before ANY property access
+  if (!message || !message.role) return null
+  if (message.role === 'assistant' && !message.content) return null
+
+  const isUser = message.role === 'user'
 
   const handleCopy = async () => {
     try {

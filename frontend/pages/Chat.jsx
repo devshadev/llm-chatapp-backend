@@ -212,8 +212,8 @@ export default function Chat() {
                 </div>
               )}
 
-              {messages.map((msg, i) => (
-                <MessageBubble key={msg.id || i} message={msg} />
+              {messages.filter(Boolean).map((msg, i) => (
+                <MessageBubble key={msg?.id || i} message={msg} />
               ))}
 
               {/* Typing indicator */}

@@ -43,7 +43,7 @@ export default function Login() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
             </svg>
           </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Welcome back</h1>
+          <h1 className="text-3xl font-bold text-white tracking-tight">Welcome back, Abdullah</h1>
           <p className="text-gray-400 mt-2 text-sm">Sign in to continue to LLM Chat</p>
         </div>
 
@@ -79,9 +79,6 @@ export default function Login() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="block text-sm font-medium text-gray-300">Password</label>
-                <button type="button" className="text-xs text-violet-400 hover:text-violet-300 transition">
-                  Forgot password?
-                </button>
               </div>
               <div className="relative">
                 <input

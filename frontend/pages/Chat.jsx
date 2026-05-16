@@ -86,252 +86,127 @@ export default function Chat() {
     }
   }
 
-  // const handleSend = async () => {
-  //   if (!input.trim() || !activeChat || loading) return
+const handleSend = async () => {
+  if (!input.trim() || !activeChat || loading) return
 
-  //   const userMessage = { role: 'user', content: input, id: Date.now() }
-  //   const currentInput = input
-  //   setInput('')
-  //   setLoading(true)
+  const userMessage = { role: 'user', content: input, id: Date.now() }
+  const currentInput = input
+  setInput('')
+  setLoading(true)
 
-  //   // Add user message
-  //   setMessages(prev => [...prev.filter(Boolean), userMessage])
+  // Update chat title from first message
+  if (messages.length === 0) {
+    const newTitle = currentInput.slice(0, 40)
+    await api.patch(`/chats/${activeChat.id}`, { title: newTitle })
+    setChats(prev => prev.map(c =>
+      c.id === activeChat.id ? { ...c, title: newTitle } : c
+    ))
+  }
 
-  //   // Update chat title from first message
-  //   if (messages.length === 0) {
-  //     const newTitle = currentInput.slice(0, 40)
-  //     await api.patch(`/chats/${activeChat.id}`, { title: newTitle })
-  //     setChats(prev => prev.map(c =>
-  //       c.id === activeChat.id ? { ...c, title: newTitle } : c
-  //     ))
-  //   }
+  const assistantMsgId = Date.now() + 1
 
-  //   const assistantMsgId = Date.now() + 1
+  try {
+    const token = localStorage.getItem('access_token')
+    const response = await fetch(
+      `${import.meta.env.VITE_API_URL}/chats/${activeChat.id}/messages/stream`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ content: currentInput })
+      }
+    )
 
-  //   try {
-  //     const token = localStorage.getItem('access_token')
-  //     const response = await fetch(
-  //       `${import.meta.env.VITE_API_URL}/chats/${activeChat.id}/messages/stream`,
-  //       {
-  //         method: 'POST',
-  //         headers: {
-  //           'Content-Type': 'application/json',
-  //           'Authorization': `Bearer ${token}`
-  //         },
-  //         body: JSON.stringify({ content: currentInput })
-  //       }
-  //     )
-
-  //     if (!response.ok) {
-  //       throw new Error(`HTTP error: ${response.status}`)
-  //     }
-
-  //     const reader = response.body.getReader()
-  //     const decoder = new TextDecoder()
-  //     let fullContent = ''
-  //     let streamStarted = false
-
-  //     while (true) {
-  //       const { done, value } = await reader.read()
-  //       if (done) break
-
-  //       const chunk = decoder.decode(value, { stream: true })
-  //       const lines = chunk.split('\n')
-
-  //       for (const line of lines) {
-  //         if (line.startsWith('data: ')) {
-  //           try {
-  //             const data = JSON.parse(line.slice(6))
-
-  //             if (data.token) {
-  //               fullContent += data.token
-
-  //               if (!streamStarted) {
-  //                 // First token — add the assistant message bubble
-  //                 streamStarted = true
-  //                 setMessages(prev => [
-  //                   ...prev.filter(Boolean),
-  //                   { role: 'assistant', content: fullContent, id: assistantMsgId }
-  //                 ])
-  //               } else {
-  //                 // Subsequent tokens — update existing bubble
-  //                 setMessages(prev => prev.filter(Boolean).map(msg =>
-  //                   msg.id === assistantMsgId
-  //                     ? { ...msg, content: fullContent }
-  //                     : msg
-  //                 ))
-  //               }
-  //             }
-
-  //             // ✅ When done signal arrives — finalize with full content
-  //             if (data.done) {
-  //               setMessages(prev => prev.filter(Boolean).map(msg =>
-  //                 msg.id === assistantMsgId
-  //                   ? { ...msg, content: fullContent }
-  //                   : msg
-  //               ))
-  //             }
-
-  //           } catch { }
-  //         }
-  //       }
-  //     }
-
-  //     // ✅ Final safety — ensure message persists after stream ends
-  //     setMessages(prev => {
-  //       const exists = prev.some(m => m?.id === assistantMsgId)
-  //       if (!exists && fullContent) {
-  //         return [...prev.filter(Boolean), {
-  //           role: 'assistant',
-  //           content: fullContent,
-  //           id: assistantMsgId
-  //         }]
-  //       }
-  //       return prev.filter(Boolean).map(msg =>
-  //         msg?.id === assistantMsgId
-  //           ? { ...msg, content: fullContent }
-  //           : msg
-  //       )
-  //     })
-
-  //   } catch (err) {
-  //     console.error('Streaming error:', err)
-  //     setMessages(prev => [
-  //       ...prev.filter(Boolean),
-  //       {
-  //         role: 'assistant',
-  //         content: 'Sorry, something went wrong. Please try again.',
-  //         id: assistantMsgId
-  //       }
-  //     ])
-  //   }
-
-  //   setLoading(false)
-  // }
-
-  const handleSend = async () => {
-    if (!input.trim() || !activeChat || loading) return
-
-    const userMessage = { role: 'user', content: input, id: Date.now() }
-    const currentInput = input
-    setInput('')
-    setLoading(true)
-
-    // Add user message
-    setMessages(prev => [...prev.filter(Boolean), userMessage])
-
-    // Update chat title from first message
-    if (messages.length === 0) {
-      const newTitle = currentInput.slice(0, 40)
-      await api.patch(`/chats/${activeChat.id}`, { title: newTitle })
-      setChats(prev => prev.map(c =>
-        c.id === activeChat.id ? { ...c, title: newTitle } : c
-      ))
+    if (!response.ok) {
+      throw new Error(`HTTP error: ${response.status}`)
     }
 
-    const assistantMsgId = Date.now() + 1
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let fullContent = ''
+    let streamStarted = false
 
-    try {
-      const token = localStorage.getItem('access_token')
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/chats/${activeChat.id}/messages/stream`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ content: currentInput })
-        }
-      )
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
 
-      if (!response.ok) {
-        throw new Error(`HTTP error: ${response.status}`)
-      }
+      const chunk = decoder.decode(value, { stream: true })
+      const lines = chunk.split('\n')
 
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let fullContent = ''
-      let streamStarted = false
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6))
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
+            if (data.token) {
+              fullContent += data.token
 
-        const chunk = decoder.decode(value, { stream: true })
-        const lines = chunk.split('\n')
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6))
-
-              if (data.token) {
-                fullContent += data.token
-
-                if (!streamStarted) {
-                  // First token — add the assistant message bubble
-                  streamStarted = true
-                  setMessages(prev => [
-                    ...prev.filter(Boolean),
-                    { role: 'assistant', content: fullContent, id: assistantMsgId }
-                  ])
-                } else {
-                  // Subsequent tokens — update existing bubble
-                  setMessages(prev => prev.filter(Boolean).map(msg =>
-                    msg.id === assistantMsgId
-                      ? { ...msg, content: fullContent }
-                      : msg
-                  ))
-                }
-              }
-
-              // ✅ When done signal arrives — finalize with full content
-              if (data.done) {
+              if (!streamStarted) {
+                // First token — add user message AND assistant bubble together
+                streamStarted = true
+                setMessages(prev => {
+                  const base = prev.filter(Boolean)
+                  const hasUser = base.some(m => m.id === userMessage.id)
+                  const withUser = hasUser ? base : [...base, userMessage]
+                  return [...withUser, { role: 'assistant', content: fullContent, id: assistantMsgId }]
+                })
+              } else {
+                // Subsequent tokens — update only assistant bubble
                 setMessages(prev => prev.filter(Boolean).map(msg =>
                   msg.id === assistantMsgId
                     ? { ...msg, content: fullContent }
                     : msg
                 ))
               }
+            }
 
-            } catch { }
-          }
+            if (data.done) {
+              setMessages(prev => prev.filter(Boolean).map(msg =>
+                msg.id === assistantMsgId
+                  ? { ...msg, content: fullContent }
+                  : msg
+              ))
+            }
+
+          } catch { }
         }
       }
-
-      // ✅ Final safety — ensure message persists after stream ends
-      setMessages(prev => {
-        const exists = prev.some(m => m?.id === assistantMsgId)
-        if (!exists && fullContent) {
-          return [...prev.filter(Boolean), {
-            role: 'assistant',
-            content: fullContent,
-            id: assistantMsgId
-          }]
-        }
-        return prev.filter(Boolean).map(msg =>
-          msg?.id === assistantMsgId
-            ? { ...msg, content: fullContent }
-            : msg
-        )
-      })
-
-    } catch (err) {
-      console.error('Streaming error:', err)
-      setMessages(prev => [
-        ...prev.filter(Boolean),
-        {
-          role: 'assistant',
-          content: 'Sorry, something went wrong. Please try again.',
-          id: assistantMsgId
-        }
-      ])
     }
 
-    setLoading(false)
+    // Final safety
+    setMessages(prev => {
+      const exists = prev.some(m => m?.id === assistantMsgId)
+      if (!exists && fullContent) {
+        return [...prev.filter(Boolean), userMessage, {
+          role: 'assistant',
+          content: fullContent,
+          id: assistantMsgId
+        }]
+      }
+      return prev.filter(Boolean).map(msg =>
+        msg?.id === assistantMsgId
+          ? { ...msg, content: fullContent }
+          : msg
+      )
+    })
+
+  } catch (err) {
+    console.error('Streaming error:', err)
+    setMessages(prev => [
+      ...prev.filter(Boolean),
+      userMessage,
+      {
+        role: 'assistant',
+        content: 'Sorry, something went wrong. Please try again.',
+        id: assistantMsgId
+      }
+    ])
   }
 
+  setLoading(false)
+}
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()

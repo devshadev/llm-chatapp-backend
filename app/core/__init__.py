@@ -22,3 +22,4 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Cookie
+from fastapi.responses import RedirectResponse
 from typing import Optional
 
 from app.core import GITHUB_CLIENT_ID, GITHUB_REDIRECT_URI, FRONTEND_URL
@@ -14,9 +15,7 @@ from app.services.github_services import (
     get_github_access_token,
     get_github_user,
     get_github_email,
-    find_or_create_github_user
 )
-from fastapi.responses import RedirectResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -73,6 +72,5 @@ async def github_callback(code: str):
     return await handle_github_callback(
         github_user=github_user,
         email=email,
-        frontend_url=FRONTEND_URL,
-        find_or_create_fn=find_or_create_github_user
+        frontend_url=FRONTEND_URL
     )

@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from bson import ObjectId
 from fastapi.responses import JSONResponse, RedirectResponse
 import uuid
 
@@ -15,7 +14,6 @@ from app.core.database import get_db
 from app.core.redis import get_redis
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 COOKIE_MAX_AGE = REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
 
 
@@ -59,7 +57,6 @@ async def delete_refresh_token(token: str):
 
 
 def _set_refresh_cookie(response, refresh_token: str):
-    """Helper — attaches refresh token cookie to any response."""
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
@@ -103,8 +100,8 @@ async def login_user(email: str, password: str):
     return user, None
 
 
-# --- Register and build full response (called by controller) ---
-async def register_and_respond(username: str, email: str, password: str) -> JSONResponse:
+# --- Register and build full response ---
+async def register_and_respond(username: str, email: str, password: str):
     user, error = await register_user(username, email, password)
     if error:
         return None, error
@@ -124,7 +121,7 @@ async def register_and_respond(username: str, email: str, password: str) -> JSON
 
 
 # --- Login and build full response ---
-async def login_and_respond(email: str, password: str) -> JSONResponse:
+async def login_and_respond(email: str, password: str):
     user, error = await login_user(email, password)
     if error:
         return None, error
@@ -167,9 +164,10 @@ async def handle_github_callback(
     github_user: dict,
     email: str,
     frontend_url: str,
-    find_or_create_fn
 ) -> RedirectResponse:
-    user = await find_or_create_fn(github_user, email)
+    from app.services.github_services import find_or_create_github_user
+
+    user = await find_or_create_github_user(github_user, email)
     access_token = create_access_token(user["id"])
     refresh_token = await create_refresh_token(user["id"])
 

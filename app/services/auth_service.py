@@ -3,6 +3,7 @@ from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from bson import ObjectId
+from fastapi.responses import JSONResponse, RedirectResponse
 import uuid
 
 from app.core import (
@@ -12,61 +13,71 @@ from app.core import (
 )
 from app.core.database import get_db
 from app.core.redis import get_redis
-from app.models.user import UserInDB
 
-# Password hashing — like bcrypt in Node.js
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+COOKIE_MAX_AGE = REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
+
 def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
-# --- JWT Access Token (short lived — 30 mins) ---
+
 def create_access_token(user_id: str) -> str:
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {"sub": user_id, "exp": expire}
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
-# --- Decode and verify JWT ---
+
 def decode_access_token(token: str) -> Optional[str]:
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        return payload.get("sub")  # returns user_id
+        return payload.get("sub")
     except JWTError:
         return None
 
-# --- Refresh Token (long lived — 30 days, stored in Redis) ---
+
 async def create_refresh_token(user_id: str) -> str:
-    token = str(uuid.uuid4())  # random unique string
+    token = str(uuid.uuid4())
     redis = get_redis()
-    expire_seconds = REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60  # 30 days in seconds
-    # Store in Redis: key = refresh_token value, value = user_id
-    await redis.setex(f"refresh:{token}", expire_seconds, user_id)
+    await redis.setex(f"refresh:{token}", COOKIE_MAX_AGE, user_id)
     return token
+
 
 async def verify_refresh_token(token: str) -> Optional[str]:
     redis = get_redis()
-    user_id = await redis.get(f"refresh:{token}")
-    return user_id  # returns None if expired or not found
+    return await redis.get(f"refresh:{token}")
+
 
 async def delete_refresh_token(token: str):
     redis = get_redis()
     await redis.delete(f"refresh:{token}")
 
+
+def _set_refresh_cookie(response, refresh_token: str):
+    """Helper — attaches refresh token cookie to any response."""
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        max_age=COOKIE_MAX_AGE,
+        samesite="lax"
+    )
+    return response
+
+
 # --- Register new user ---
 async def register_user(username: str, email: str, password: str):
     db = get_db()
 
-    # Check if email already exists — like findOne() in Mongoose
-    existing = await db.users.find_one({"email": email})
-    if existing:
+    if await db.users.find_one({"email": email}):
         return None, "Email already registered"
 
-    # Check if username taken
-    existing_username = await db.users.find_one({"username": username})
-    if existing_username:
+    if await db.users.find_one({"username": username}):
         return None, "Username already taken"
 
     hashed = hash_password(password)
@@ -77,22 +88,90 @@ async def register_user(username: str, email: str, password: str):
         "github_id": None,
         "created_at": datetime.utcnow()
     }
-
-    # Insert into MongoDB — like .save() in Mongoose
     result = await db.users.insert_one(user_doc)
     user_doc["id"] = str(result.inserted_id)
     return user_doc, None
 
+
 # --- Login user ---
 async def login_user(email: str, password: str):
     db = get_db()
-
     user = await db.users.find_one({"email": email})
-    if not user:
+    if not user or not verify_password(password, user["hashed_password"]):
         return None, "Invalid email or password"
-
-    if not verify_password(password, user["hashed_password"]):
-        return None, "Invalid email or password"
-
     user["id"] = str(user["_id"])
     return user, None
+
+
+# --- Register and build full response (called by controller) ---
+async def register_and_respond(username: str, email: str, password: str) -> JSONResponse:
+    user, error = await register_user(username, email, password)
+    if error:
+        return None, error
+
+    access_token = create_access_token(user["id"])
+    refresh_token = await create_refresh_token(user["id"])
+
+    response = JSONResponse(content={
+        "access_token": access_token,
+        "user": {
+            "id": user["id"],
+            "username": user["username"],
+            "email": user["email"]
+        }
+    })
+    return _set_refresh_cookie(response, refresh_token), None
+
+
+# --- Login and build full response ---
+async def login_and_respond(email: str, password: str) -> JSONResponse:
+    user, error = await login_user(email, password)
+    if error:
+        return None, error
+
+    access_token = create_access_token(user["id"])
+    refresh_token = await create_refresh_token(user["id"])
+
+    response = JSONResponse(content={
+        "access_token": access_token,
+        "user": {
+            "id": user["id"],
+            "username": user["username"],
+            "email": user["email"]
+        }
+    })
+    return _set_refresh_cookie(response, refresh_token), None
+
+
+# --- Refresh access token ---
+async def refresh_access_token(refresh_token: Optional[str]):
+    if not refresh_token:
+        return None, "No refresh token"
+    user_id = await verify_refresh_token(refresh_token)
+    if not user_id:
+        return None, "Invalid or expired refresh token"
+    return create_access_token(user_id), None
+
+
+# --- Logout ---
+async def logout_user(refresh_token: Optional[str]) -> JSONResponse:
+    if refresh_token:
+        await delete_refresh_token(refresh_token)
+    response = JSONResponse(content={"message": "Logged out"})
+    response.delete_cookie("refresh_token")
+    return response
+
+
+# --- GitHub OAuth — full callback flow ---
+async def handle_github_callback(
+    github_user: dict,
+    email: str,
+    frontend_url: str,
+    find_or_create_fn
+) -> RedirectResponse:
+    user = await find_or_create_fn(github_user, email)
+    access_token = create_access_token(user["id"])
+    refresh_token = await create_refresh_token(user["id"])
+
+    response = RedirectResponse(url=f"{frontend_url}?access_token={access_token}")
+    return _set_refresh_cookie(response, refresh_token)

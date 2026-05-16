@@ -8,6 +8,7 @@ from app.core.redis import connect_redis, close_redis
 from app.controllers.auth_controller import router as auth_router
 from app.core.dependencies import get_current_user
 from app.controllers.chat_controller import router as chat_router
+from app.core.db_init import initialize_indexes
 
 security = HTTPBearer()
 
@@ -15,6 +16,7 @@ security = HTTPBearer()
 async def lifespan(app: FastAPI):
     await connect_db()
     await connect_redis()
+    await initialize_indexes()
     yield
     await close_db()
     await close_redis()
